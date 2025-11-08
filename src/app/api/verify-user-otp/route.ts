@@ -12,9 +12,13 @@ export async function POST(request: Request) {
     const { telegram_id, otp } = await request.json();
 
     if (!telegram_id || !otp) {
-      return NextResponse.json({ error: "telegram_id and otp required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "telegram_id and otp required" },
+        { status: 400 }
+      );
     }
 
+    // Query OTP record filtering only by telegram_id (no email)
     const { data, error } = await supabase
       .from("otps")
       .select("*")
@@ -31,23 +35,22 @@ export async function POST(request: Request) {
     console.log("Current time (UTC):", now.toISOString());
     console.log("OTP expiry time (UTC):", expiresAt.toISOString());
 
-    // Check expiry: if current time is after expiry, OTP is expired
     if (now > expiresAt) {
       await supabase.from("otps").delete().eq("telegram_id", telegram_id);
       return NextResponse.json({ error: "OTP expired" }, { status: 400 });
     }
 
-    // Verify provided OTP matches stored hashed OTP
     const isValid = await verifyOTP(otp, data.otp);
     if (!isValid) {
       return NextResponse.json({ error: "Invalid OTP" }, { status: 400 });
     }
 
-    // Valid OTP: cleanup OTP record
+    // Delete OTP record after successful verification
     await supabase.from("otps").delete().eq("telegram_id", telegram_id);
 
-    // Proceed to next registration step (e.g., email + password)
-    return NextResponse.json({ message: "OTP verified. Proceed to email/password setup." });
+    return NextResponse.json({
+      message: "OTP verified. Proceed to email/password setup.",
+    });
   } catch (err) {
     console.error("Error in verify-user-otp:", err);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
